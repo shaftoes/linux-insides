@@ -129,7 +129,7 @@ And the last `Type` field describes type of the `IDT` entry. There are three dif
 * Interrupt descriptor
 * Trap descriptor
 
-Interrupt and trap descriptors contain a far pointer to the entry point of the interrupt handler. Only one difference between these types is how CPU handles `IF` flag. If interrupt handler was accessed through interrupt gate, CPU clear the `IF` flag to prevent other interrupts while current interrupt handler executes. After that current interrupt handler executes, CPU sets the `IF` flag again with `iret` instruction. 
+Interrupt and trap descriptors contain a far pointer to the entry point of the interrupt handler. The principle difference between these two types is how the CPU handles `IF` flag. For Interrupt descriptors, the CPU clears the `IF` flag to prevent other interrupts from taking control while the current interrupt handler executes. After that current interrupt handler executes, CPU sets the `IF` flag again with `iret` instruction. 
 
 Other bits in the interrupt gate reserved and must be 0. Now let's look how CPU handles interrupts:
 
@@ -137,7 +137,7 @@ Other bits in the interrupt gate reserved and must be 0. Now let's look how CPU 
 * If interrupt causes an error code (like `#PF` for example), CPU saves an error on the stack after instruction pointer;
 * After interrupt handler executed, `iret` instruction used to return from it.
 
-Now let's back to code.
+Now let's get back to the code.
 
 Fill and load IDT
 --------------------------------------------------------------------------------
