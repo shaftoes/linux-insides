@@ -20,7 +20,7 @@ from the [arch/x86/kernel/head64.c](https://github.com/torvalds/linux/blob/maste
 Some theory
 --------------------------------------------------------------------------------
 
-An interrupt is an event caused by software or hardware to the CPU. For example: a user presses a key on her keyboard, and an interrupt is triggered and is sent to the CPU. The CPU will stop the current task and transfer control to a special routine called an [interrupt handler](https://en.wikipedia.org/wiki/Interrupt_handler). An interrupt handler will then execute some code (dependent on what the interrupt is), and transfer control back to the previously stopped task. We can split interrupts into three types:
+An interrupt is a signal sent to the CPU, by software or hardware, that indicates immediate action is required. For example: when a user presses a key on her keyboard, and an interrupt is triggered and is sent to the CPU. The CPU will stop the current task and transfer control to a special routine called an [interrupt handler](https://en.wikipedia.org/wiki/Interrupt_handler). An interrupt handler will then execute some code (dependent on what the interrupt is), and transfer control back to the previously stopped task. We can split interrupts into three types:
 
 * Software interrupts - when a piece software signals the CPU that it needs kernel attention. Generally used for system calls;
 * Hardware interrupts - when a hardware event happens, like a clock signal or button press;
@@ -32,7 +32,7 @@ Every interrupt and exception is assigned a unique `vector number`.  A `Vector n
 #define NUM_EXCEPTION_VECTORS 32
 ```
 
-The CPU uses vector number as an index in the `Interrupt Descriptor Table` (example later) to catch interrupts from the [APIC](http://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) or through it's pins. The Following table shows the firs (`0-31`) exceptions:
+The CPU uses vector numbers as indices in the `Interrupt Descriptor Table` (example later) to catch interrupts from the [APIC](http://en.wikipedia.org/wiki/Advanced_Programmable_Interrupt_Controller) or through its pins. The Following table shows the first (`0-31`) exceptions:
 
 ```
 ----------------------------------------------------------------------------------------------
@@ -84,9 +84,9 @@ The CPU uses vector number as an index in the `Interrupt Descriptor Table` (exam
 ----------------------------------------------------------------------------------------------
 ```
 
-To react to an interrupt, the CPU uses a special structure: an Interrupt Descriptor Table or IDT. Depending on the architecture used (x86 or 64) An IDT is an array of 8-byte/16-byte descriptors (like a Global Descriptor Table) whose entries are called `gates`. The CPU multiplies the vector number by the size of the array values to find the index of the IDT entry. Recall from the previous part that the CPU uses the special `GDTR` register to locate the Global Descriptor Table. Similarily, there is a special register `IDTR` for Interrupt Descriptor Table and a special `lidt` instruction for loading the base address of the table into this register.
+To react to an interrupt, the CPU uses a special structure: an Interrupt Descriptor Table or IDT. Depending on the architecture used (x86 or 64) An IDT is an array of 8-byte/16-byte descriptors (like a Global Descriptor Table) whose entries are called `gates`. The CPU multiplies the vector number by the size of the array values to find the index of the IDT entry. Remember that the CPU uses the special `GDTR` register to locate the Global Descriptor Table. Similarily, there is a special register `IDTR` for the Interrupt Descriptor Table and a special `lidt` instruction for loading the base address of the table into this register.
 
-64-bit mode IDT entry has following structure:
+a 64-bit mode IDT entry has the following structure:
 
 ```
 127                                                                             96
@@ -117,25 +117,26 @@ To react to an interrupt, the CPU uses a special structure: an Interrupt Descrip
 
 Where:
 
-* `Offset` - is offset to entry point of an interrupt handler;
+* `Offset` - offset to the entry point of an interrupt handler;
 * `DPL` -    Descriptor Privilege Level;
 * `P` -      Segment Present flag;
 * `Segment selector` - a code segment selector in GDT or LDT
 * `IST` -    provides ability to switch to a new stack for interrupts handling.
+* `Type` - indicates the type of interrupt handler 
 
-And the last `Type` field describes type of the `IDT` entry. There are three different kinds of handlers for interrupts:
+There are three different type of handlers for interrupts:
 
 * Task descriptor
 * Interrupt descriptor
 * Trap descriptor
 
-Interrupt and trap descriptors contain a far pointer to the entry point of the interrupt handler. The principle difference between these two types is how the CPU handles `IF` flag. For Interrupt descriptors, the CPU clears the `IF` flag to prevent other interrupts from taking control while the current interrupt handler executes. After that current interrupt handler executes, CPU sets the `IF` flag again with `iret` instruction. 
+Interrupt and trap descriptors contain a far pointer to the entry point of the interrupt handler. The principle difference between these two types is how the CPU handles `IF` flag. For Interrupt descriptors, the CPU clears the `IF` flag to prevent other interrupts from taking control while the current interrupt handler executes. After that current interrupt handler executes, the CPU sets the `IF` flag again with `iret` instruction. 
 
-Other bits in the interrupt gate reserved and must be 0. Now let's look how CPU handles interrupts:
+Other bits in the interrupt gate are reserved and must be 0. Now let's look at how the CPU handles interrupts:
 
-* CPU save flags register, `CS`, and instruction pointer on the stack.
-* If interrupt causes an error code (like `#PF` for example), CPU saves an error on the stack after instruction pointer;
-* After interrupt handler executed, `iret` instruction used to return from it.
+* the CPU saves the flag's register, `CS`, and instruction pointer on the stack.
+* If interrupt causes an error (like `#PF` for example), the CPU places it on the stack after the instruction pointer;
+* control is returned to the calling function after the instruction handler has executed using the `iret` (interrupt handler) instruction.
 
 Now let's get back to the code.
 
@@ -151,10 +152,10 @@ for (i = 0; i < NUM_EXCEPTION_VECTORS; i++)
 
 Here we call `set_intr_gate` in the loop, which takes two parameters:
 
-* Number of an interrupt or `vector number`;
-* Address of the idt handler.
+* the `vector number`;
+* Address of the IDT handler.
 
-and inserts an interrupt gate to the `IDT` table which is represented by the `&idt_descr` array. First of all let's look on the `early_idt_handler_array` array. It is an array which is defined in the [arch/x86/include/asm/segment.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/segment.h) header file contains addresses of the first `32` exception handlers:
+and inserts an interrupt gate to the `IDT` table which is represented by the `&idt_descr` array. First of all let's look at the `early_idt_handler_array` array. It is an array which is defined in the [arch/x86/include/asm/segment.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/segment.h) header file, and contains addresses of the first `32` exception handlers:
 
 ```C
 #define EARLY_IDT_HANDLER_SIZE   9
@@ -163,11 +164,11 @@ and inserts an interrupt gate to the `IDT` table which is represented by the `&i
 extern const char early_idt_handler_array[NUM_EXCEPTION_VECTORS][EARLY_IDT_HANDLER_SIZE];
 ```
 
-The `early_idt_handler_array` is `288` bytes array which contains address of exception entry points every nine bytes. Every nine bytes of this array consist of two bytes optional instruction for pushing dummy error code if an exception does not provide it, two bytes instruction for pushing vector number to the stack and five bytes of `jump` to the common execption handler code.
+The `early_idt_handler_array` is a `288` byte array (with 9 byte values) containing the addresses of exception entry points. Of the nine bytes, two are for optional instructions for pushing a dummy error code if the exception does not explicitly provide one, two bytes are used for the vector number, and the five bytes correspond to the location of the common exception handler code.
 
-As we can see, We're filling only first 32 `IDT` entries in the loop, because all of the early setup runs with interrupts disabled, so there is no need to set up interrupt handlers for vectors greater than `32`. The `early_idt_handler_array` array contains generic idt handlers and we can find its definition in the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) assembly file. For now we will skip it, but will look it soon. Before this we will look on the implementation of the `set_intr_gate` macro.
+We're only filling the first 32 `IDT` entries in the loop, because all of the early setup runs with interrupts disabled, so there is no need to set up interrupt handlers for vectors greater than `32`. The `early_idt_handler_array` array contains generic idt handlers and we can find their definition in the [arch/x86/kernel/head_64.S](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/head_64.S) assembly file. Before we explore this in greater depth, we will look at the implementation of the `set_intr_gate` macro.
 
-The `set_intr_gate` macro is defined in the [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h) header file and looks:
+The `set_intr_gate` macro is defined in the [arch/x86/include/asm/desc.h](https://github.com/torvalds/linux/blob/master/arch/x86/include/asm/desc.h) header file:
 
 ```C
 #define set_intr_gate(n, addr)                         \
@@ -180,7 +181,7 @@ The `set_intr_gate` macro is defined in the [arch/x86/include/asm/desc.h](https:
          } while (0)
 ```
 
-First of all it checks with that passed interrupt number is not greater than `255` with `BUG_ON` macro. We need to do this check because we can have only `256` interrupts. After this, it make a call of the `_set_gate` function which writes address of an interrupt gate to the `IDT`:
+It first checks that the passed interrupt number is less than `255` with the `BUG_ON` macro, since there can only be `256` interrupts. After this, it calls `_set_gate`, which writes the address of the interrupt gate `addr` to the `IDT`:
 
 ```C
 static inline void _set_gate(int gate, unsigned type, void *addr,
@@ -193,7 +194,7 @@ static inline void _set_gate(int gate, unsigned type, void *addr,
 }
 ```
 
-At the start of `_set_gate` function we can see call of the `pack_gate` function which fills `gate_desc` structure with the given values:
+`pack_gate` initializes the `gate_desc` structure `s` with the given values:
 
 ```C
 static inline void pack_gate(gate_desc *gate, unsigned type, unsigned long func,
@@ -212,7 +213,7 @@ static inline void pack_gate(gate_desc *gate, unsigned type, unsigned long func,
 }
 ```
 
-As I mentioned above, we fill gate descriptor in this function. We fill three parts of the address of the interrupt handler with the address which we got in the main loop (address of the interrupt handler entry point). We are using three following macros to split address on three parts:
+The address `addr` of the interrupt handler is split into it's three components using the following bitmaks macros:
 
 ```C
 #define PTR_LOW(x) ((unsigned long long)(x) & 0xFFFF)
@@ -220,9 +221,11 @@ As I mentioned above, we fill gate descriptor in this function. We fill three pa
 #define PTR_HIGH(x) ((unsigned long long)(x) >> 32)
 ```
 
-With the first `PTR_LOW` macro we get the first `2` bytes of the address, with the second `PTR_MIDDLE` we get the second `2` bytes of the address and with the third `PTR_HIGH` macro we get the last `4` bytes of the address. Next we setup the segment selector for interrupt handler, it will be our kernel code segment - `__KERNEL_CS`. In the next step we fill `Interrupt Stack Table` and `Descriptor Privilege Level` (highest privilege level) with zeros. And we set `GAT_INTERRUPT` type in the end. 
+`PTR_LOW` returns the first `2` bytes, `PTR_MIDDLE` returns the `2` bytes, and `PTR_HIGH` returns the last `4` bytes of the address. 
 
-Now we have filled IDT entry and we can call `native_write_idt_entry` function which just copies filled `IDT` entry to the `IDT`:
+the segment selector for interrupt handler, will be our kernel code segment, which is pointed to by the - `__KERNEL_CS` macro. The `Interrupt Stack Table` and `Descriptor Privilege Level` (highest privilege level) are initialized to zeros, and we set `GAT_INTERRUPT` type to the provided `IDT` type. 
+
+We can now call `native_write_idt_entry` with our initiailized `IDT` struct,  which will simply copy it to the corresponding entry in the table:
 
 ```C
 static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_desc *gate)
@@ -231,7 +234,7 @@ static inline void native_write_idt_entry(gate_desc *idt, int entry, const gate_
 }
 ```
 
-After that main loop will finished, we will have filled `idt_table` array of `gate_desc` structures and we can load `Interrupt Descriptor table` with the call of the:
+After that main loop has finished, we will have filled the `idt_table` array of `gate_desc` structures and we can load the `Interrupt Descriptor table` with a call to:
 
 ```C
 load_idt((const struct desc_ptr *)&idt_descr);
@@ -249,9 +252,9 @@ and `load_idt` just executes `lidt` instruction:
 asm volatile("lidt %0"::"m" (*dtr));
 ```
 
-You can note that there are calls of the `_trace_*` functions in the `_set_gate` and other functions. These functions fills `IDT` gates in the same manner that `_set_gate` but with one difference. These functions use `trace_idt_table` the `Interrupt Descriptor Table` instead of `idt_table` for tracepoints (we will cover this theme in the another part).
+You may have noticed calls to `_trace_*` functions in `_set_gate` and other functions along the way. They are similar to `_set_gate` insofar as they fill `IDT` gates, but use `trace_idt_table` and the `Interrupt Descriptor Table` instead of `idt_table` for tracepoints (we will cover this theme later on).
 
-Okay, now we have filled and loaded `Interrupt Descriptor Table`, we know how the CPU acts during an interrupt. So now time to deal with interrupts handlers.
+We have initialized the `Interrupt Descriptor Table`, and know how the CPU handles interrupts. The next step is exploring interrupt handlers.
 
 Early interrupts handlers
 --------------------------------------------------------------------------------
